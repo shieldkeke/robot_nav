@@ -8,7 +8,6 @@ from nav_msgs.msg import Path
 from geometry_msgs.msg import PoseStamped,Twist
 from sensor_msgs.msg import LaserScan
 
-# import dwa
 from common import *
 from pursuit import *
 
@@ -23,7 +22,7 @@ def limitVal(minV,maxV,v):
     return v
 
 class LocalPlanner:
-    def __init__(self):
+    def __init__(self, type_ = 'simple'):#"simple", "dwa"
         self.arrive = 0.1
         self.x = 0.0
         self.y = 0.0
@@ -41,9 +40,9 @@ class LocalPlanner:
         self.midpose_pub = rospy.Publisher('/course_agv/mid_goal',PoseStamped,queue_size=1)
         self.laser_sub = rospy.Subscriber('/course_agv/laser/scan',LaserScan,self.laserCallback)
         self.planner_thread = None
-
         self.need_exit = False
-        pass
+        self.type = type_
+
     def updateGlobalPose(self):
         try:
             self.tf.waitForTransform("/map", "/robot_base", rospy.Time(), rospy.Duration(4.0))
@@ -91,6 +90,7 @@ class LocalPlanner:
         self.need_exit = True
         time.sleep(0.1)
         self.path = msg
+        
         self.planner_thread = Thread(target=self.planThreadFunc)
         if len(self.path.poses) == 0:
             return
@@ -113,8 +113,10 @@ class LocalPlanner:
         self.final = np.array([cx[-1],cy[-1]])
         self.plan_cx,self.plan_cy = np.array(cx),np.array(cy)
         self.state = State(x = self.x, y = self.y, yaw = self.yaw, v = 0.0, w = 0.0)
-        self.planner = Simple()
-        # self.planner = DWA()
+        if self.type == 'simple':
+            self.planner = Simple()
+        elif self.type == 'dwa':
+            self.planner = DWA()
         
     def planThreadFunc(self):
         print("running planning thread!!")
@@ -142,16 +144,17 @@ class LocalPlanner:
         self.state.y = self.y
         self.state.yaw = self.yaw
 
-        target_speed = 0.3
-        a, d_theta = self.planner.planning(self.state, (self.plan_cx[self.goal_index], self.plan_cy[self.goal_index]), target_speed)
-        self.state.update(a, d_theta)
+        if self.type == 'simple':
+            target_speed = 0.3
+            a, d_theta = self.planner.planning(self.state, (self.plan_cx[self.goal_index], self.plan_cy[self.goal_index]), target_speed)
+            self.state.update(a, d_theta)
 
         # [attension] self.plan_goal, plan_ob, state is in robot_base frame; cx,cy is in map frame
         
-        # v, w = planner.planning(state, self.plan_config,self.plan_goal,self.plan_ob)
-        # v, w = self.planner.planning(self.state, self.plan_goal, self.plan_ob)
-        # self.state.v = v
-        # self.state.w = w
+        elif self.type == 'dwa':
+            v, w = self.planner.planning(self.state, self.plan_goal, self.plan_ob)
+            self.state.v = v
+            self.state.w = w
 
         self.publishVel()
         

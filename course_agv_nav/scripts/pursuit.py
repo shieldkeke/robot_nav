@@ -97,14 +97,16 @@ class DWA:
 
 
     def planning(self, state, goal, ob):
+        
         """
         Dynamic Window Approach control
         """
-        x=[state.x,state.y,state.yaw,state.v,state.w]
+        # x=[state.x,state.y,state.yaw,state.v,state.w]
+        x = [0,0,0,state.v,state.w]
         min_cost = 99999999
         best_u = [0.0, 0.0]
         best_trajectory = np.array([x])
-
+        ob = None
         # calculate dynamic window
         vmin = max(self.config.min_speed, x[3]-self.config.max_accel * self.config.dt)
         vmax = min(self.config.max_speed, x[3]+self.config.max_accel * self.config.dt)
@@ -125,7 +127,7 @@ class DWA:
                         best_trajectory = trajectory
         
         # u[0] is vx, u[1] is vw
-        print(best_u)
+        # print(best_u)
         self.u_plot.append(best_u)
         return best_u
 

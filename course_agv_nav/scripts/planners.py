@@ -1,8 +1,10 @@
 from common import *
-import matplotlib.pyplot as plt
 import numpy as np
 import copy
 import time
+from math import sqrt, cos, sin
+from scipy.spatial import KDTree
+import random
 
 class Planner:
     def __init__(self ,height, width, map_data, planner_type="JPS"):
@@ -25,15 +27,26 @@ class Planner:
             planner = JPS(start_point, end_point, map)
         elif self.planner_type == "A*":
             planner = A_star(start_point, end_point, map)
+        elif self.planner_type == "RRT*":
+            obs = Obstacle(map)
+            planner = RRT_Star(obs)
 
         t = time.time()
-        arrived, path = planner.Process()      
-        print(f"time: {time.time()-t:.2f}s")  
+        if self.planner_type == "RRT*":
+            arrived, path = planner.Process(end_point, start_point)
+        else:
+            arrived, path = planner.Process()      
+        print(f"time: {time.time()-t:.3f}s")  
         plan_rx = []
         plan_ry = []
-        for i in range(len(path)):
-            plan_rx.append((path[i].point.x - 64) / 6.4)
-            plan_ry.append((path[i].point.y - 64) / 6.4)
+        if self.planner_type == "RRT*":
+            for i in range(len(path)):
+                plan_rx.append((path[i].x - 64) / 6.4) 
+                plan_ry.append((path[i].y - 64) / 6.4)
+        else:
+            for i in range(len(path)):
+                plan_rx.append((path[i].point.x - 64) / 6.4)
+                plan_ry.append((path[i].point.y - 64) / 6.4)
         return plan_rx, plan_ry
     
 class JPS:  
@@ -72,7 +85,7 @@ class JPS:
         def get_direction(self):
             x = self.father and self.father.point.x - self.point.x and -(self.father.point.x - self.point.x)/abs(self.father.point.x - self.point.x) or 0
             y = self.father and self.father.point.y - self.point.y and -(self.father.point.y - self.point.y)/abs(self.father.point.y - self.point.y) or 0
-            return Vec(x ,y)
+            return Vector(x ,y)
 
     def search_next(self, Vertex, horizonal, vertical): 
         nearVertex = Vertex.neibor(horizonal, vertical)  
@@ -249,7 +262,7 @@ class JPS:
         if not now or self.is_closed(now) or self.is_obstacle(now):
             return None
         
-        d = Vec(self.direction(now.point.x, pre.point.x), self.direction(now.point.y, pre.point.y))
+        d = Vector(self.direction(now.point.x, pre.point.x), self.direction(now.point.y, pre.point.y))
         
         # 1.
         if self.is_end(now):
@@ -396,3 +409,136 @@ class A_star:
                                 self.end_Vertex = temp_Vertex
                                 return 1 
         return 0
+    
+
+
+class RRT_Star():
+    def __init__(self, obs) -> None:
+        self.search_tree = []
+        # self.search_tree_back = []
+        self.search_list = []
+        # self.search_list_back = []
+        self.path = []
+        self.new_path = []
+        self.start = None
+        self.end = None
+        self.obs = obs
+        self.dynamic = False
+        self.end_probility = 0.3
+        self.step_len = 10
+        self.min_dis = 1
+        self.sample_num = 2000
+        self.x_bound = [0, 127]
+        self.y_bound = [0, 127]
+        
+
+    def expand(self, temp_node, father_idx):
+        #expand for one step 
+        father_node = self.search_list[father_idx].data
+        new_node = father_node + self.step_len * (temp_node - father_node)/(temp_node - father_node).mod()
+        return new_node
+
+    def tree_grow(self):
+        for i in range(self.sample_num):
+
+            # check for the stop 
+            end_idx = len(self.search_list) - 1
+            end_node = self.search_list[end_idx]
+            if end_node.data.dis(self.end)<self.min_dis or self.obs.line_check(end_node.data, self.end, self.dynamic):
+                self.search_list.append(Tree(self.end, end_idx, end_node.dist + end_node.data.dis(self.end)))
+                return True
+
+            # sample 
+            if random.random() > self.end_probility:
+                # point_s = Point(random.uniform(self.x_bound[0], self.x_bound[1]), random.uniform(self.y_bound[0], self.y_bound[1]))
+                point_s = Point(int(random.uniform(self.x_bound[0], self.x_bound[1])), int(random.uniform(self.y_bound[0], self.y_bound[1])))
+            else:
+                point_s = self.end
+
+            # search for the nearst.If we use ikdtree ,it'll be faster
+            self.search_tree = KDTree([[node.data.x, node.data.y] for node in self.search_list])
+            _, idx = self.search_tree.query([point_s.x, point_s.y],k = 1)
+            if point_s != self.search_list[idx].data:
+                new_node = self.expand(point_s, idx)
+            else:
+                continue
+
+            #check collision
+            if not self.obs.collision(new_node, self.dynamic):
+                # add it , find global path shrotest father
+                near_idx = self.search_tree.query_ball_point([new_node.x, new_node.y], self.step_len * 1.5)
+                father = -1
+                min_dist = 99999
+                for i in range(0, len(near_idx)):
+
+                    if not self.obs.line_check(new_node, self.search_list[near_idx[i]].data, self.dynamic):
+                        continue
+
+                    if new_node.dis(self.search_list[near_idx[i]].data) + self.search_list[near_idx[i]].dist < min_dist:
+                        father = near_idx[i]
+                        min_dist = new_node.dis(self.search_list[near_idx[i]].data) + self.search_list[near_idx[i]].dist
+                
+                if father == -1:
+                    continue
+                self.search_list.append(Tree(new_node, father, min_dist))
+
+        print("search failed")
+        return False
+    
+    def run(self, start, end, dynamic = False):
+        self.dynamic = dynamic
+        self.search_list.clear()
+        self.path.clear()
+        self.new_path.clear()
+        self.start = start
+        self.end = end
+        self.search_list.append(Tree(start,-1,0))
+        if not self.tree_grow():
+            return False
+        self.trace_back()
+        # self.print_old_path()
+        self.opt_path()
+        # self.print_new_path()
+        print("search success")
+        return True
+    
+    def Process(self, start, end):
+        arrived = self.run(start, end)
+        return arrived, self.get_path()
+    
+    def trace_back(self):
+        node = self.search_list[len(self.search_list)-1]
+        self.path.append(node.data)
+        while node.father>=0:
+            node = self.search_list[node.father]
+            self.path.append(node.data)
+        self.path.reverse()
+
+    def opt_path(self):
+        node = self.path[0]
+        next_node = None
+        self.new_path.append(node)
+        for i in range(1, len(self.path)):
+            if node and self.obs.line_check(node, self.path[i], self.dynamic):
+                next_node = self.path[i]
+            else:
+                node = next_node
+                if node:
+                    self.new_path.append(node)
+                next_node = self.path[i]
+        if next_node:
+            self.new_path.append(next_node)
+        # self.new_path.reverse() # dont need to reverse if input is reversed
+
+    def get_path(self):
+        return self.new_path
+    
+    def print_old_path(self):
+        print("*"*20)
+        for i in range(len(self.path)):
+            print(self.path[i].x, self.path[i].y)
+        
+    def print_new_path(self):
+        print("*"*20)
+        for i in range(len(self.new_path)):
+            print(self.new_path[i].x, self.new_path[i].y)

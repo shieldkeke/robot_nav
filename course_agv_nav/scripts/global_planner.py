@@ -14,7 +14,7 @@ from planners import Planner
         
 
 class GlobalPlanner:
-    def __init__(self):
+    def __init__(self, type_ = 'JPS'):#"A*", "JPS", "RRT*"
         self.plan_sx = 0
         self.plan_sy = 0
         self.plan_gx = 8.00
@@ -34,6 +34,7 @@ class GlobalPlanner:
         self.path_pub = rospy.Publisher('/course_agv/global_path',Path,queue_size = 1)
         self.map_sub = rospy.Subscriber('/slam_map',OccupancyGrid,self.mapCallback)
         self.updateMap()
+        self.type = type_
         # self.updateGlobalPose()
 
 
@@ -74,8 +75,7 @@ class GlobalPlanner:
         self.plan_oy = (oy*self.map.info.resolution+self.map.info.origin.position.y).tolist()
         height = self.map.info.height
         width = self.map.info.width   
-        self.planner = Planner(height, width, map_data,"JPS")
-        # self.planner = Planner(height, width, map_data,"A*")
+        self.planner = Planner(height, width, map_data, self.type)
 
     def mapCallback(self,msg):
         self.map = msg
