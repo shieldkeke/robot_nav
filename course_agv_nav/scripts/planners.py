@@ -18,6 +18,11 @@ class Planner:
                     self.map.set_grid(j, i, "obstacle")
         
     def planning(self, start_point, end_point):
+
+        print("*"*20)
+        print("planner: ", self.planner_type)
+        print("start: ", start_point.x, start_point.y, " end: ", end_point.x, end_point.y)
+        
         map = copy.deepcopy(self.map)
         map.set_grid(start_point.x, start_point.y, "origin")
         map.set_grid(end_point.x, end_point.y, "goal")
@@ -47,6 +52,14 @@ class Planner:
             for i in range(len(path)):
                 plan_rx.append((path[i].point.x - 64) / 6.4)
                 plan_ry.append((path[i].point.y - 64) / 6.4)
+        if plan_rx and len(plan_rx) > 1:
+            total_len = sum([sqrt((plan_rx[i]-plan_rx[i+1])**2 + (plan_ry[i]-plan_ry[i+1])**2) for i in range(len(plan_rx)-1)])
+            print(f"totol length(in pixel): {total_len:.3f}")
+        else:
+            print("totol length(in pixel): 0")
+        
+        print("*"*20)
+
         return plan_rx, plan_ry
     
 class JPS:  
@@ -61,8 +74,8 @@ class JPS:
         self.end_Vertex = 0
         self.max_iter = 10000
 
-        print("start: ", start_point.x, start_point.y)
-        print("end: ", end_point.x, end_point.y)
+        # print("start: ", start_point.x, start_point.y)
+        # print("end: ", end_point.x, end_point.y)
 
     class Vertex: 
 
@@ -304,7 +317,7 @@ class A_star:
         self.end_point = end_point
         self.map = map    
         self.end_Vertex = 0
-        self.max_iter = 100000
+        self.max_iter = 10000
 
     class Vertex: 
 
@@ -415,9 +428,7 @@ class A_star:
 class RRT_Star():
     def __init__(self, obs) -> None:
         self.search_tree = []
-        # self.search_tree_back = []
         self.search_list = []
-        # self.search_list_back = []
         self.path = []
         self.new_path = []
         self.start = None
@@ -438,7 +449,7 @@ class RRT_Star():
         new_node = father_node + self.step_len * (temp_node - father_node)/(temp_node - father_node).mod()
         return new_node
 
-    def tree_grow(self):
+    def tree_grow(self, use_KDTree = False):
         for i in range(self.sample_num):
 
             # check for the stop 
@@ -446,6 +457,7 @@ class RRT_Star():
             end_node = self.search_list[end_idx]
             if end_node.data.dis(self.end)<self.min_dis or self.obs.line_check(end_node.data, self.end, self.dynamic):
                 self.search_list.append(Tree(self.end, end_idx, end_node.dist + end_node.data.dis(self.end)))
+                print("search step: ", i)
                 return True
 
             # sample 
@@ -456,17 +468,36 @@ class RRT_Star():
                 point_s = self.end
 
             # search for the nearst.If we use ikdtree ,it'll be faster
-            self.search_tree = KDTree([[node.data.x, node.data.y] for node in self.search_list])
-            _, idx = self.search_tree.query([point_s.x, point_s.y],k = 1)
-            if point_s != self.search_list[idx].data:
-                new_node = self.expand(point_s, idx)
+            if use_KDTree:
+                self.search_tree = KDTree([[node.data.x, node.data.y] for node in self.search_list])
+                _, idx = self.search_tree.query([point_s.x, point_s.y],k = 1)
+                if point_s != self.search_list[idx].data:
+                    new_node = self.expand(point_s, idx)
+                else:
+                    continue
             else:
-                continue
+                min_dist = 99999
+                idx = -1
+                for j in range(len(self.search_list)):
+                    dist = self.search_list[j].data.dis(point_s)
+                    if dist < min_dist and dist > 0:
+                        min_dist = dist
+                        idx = j
+                if idx == -1:
+                    continue
+                new_node = self.expand(point_s, idx)
+                
 
             #check collision
             if not self.obs.collision(new_node, self.dynamic):
                 # add it , find global path shrotest father
-                near_idx = self.search_tree.query_ball_point([new_node.x, new_node.y], self.step_len * 1.5)
+                if use_KDTree:
+                    near_idx = self.search_tree.query_ball_point([new_node.x, new_node.y], self.step_len * 1.5)
+                else:
+                    near_idx = []
+                    for j in range(len(self.search_list)):
+                        if self.search_list[j].data.dis(new_node) < self.step_len * 1.5:
+                            near_idx.append(j)
                 father = -1
                 min_dist = 99999
                 for i in range(0, len(near_idx)):
@@ -481,7 +512,7 @@ class RRT_Star():
                 if father == -1:
                     continue
                 self.search_list.append(Tree(new_node, father, min_dist))
-
+        print("search step: ", self.sample_num)
         print("search failed")
         return False
     
@@ -497,8 +528,10 @@ class RRT_Star():
             return False
         self.trace_back()
         # self.print_old_path()
+        print("path length: ", len(self.path))
         self.opt_path()
         # self.print_new_path()
+        print("new path length: ", len(self.new_path))
         print("search success")
         return True
     

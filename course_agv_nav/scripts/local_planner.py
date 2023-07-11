@@ -22,7 +22,7 @@ def limitVal(minV,maxV,v):
     return v
 
 class LocalPlanner:
-    def __init__(self, type_ = 'simple'):#"simple", "dwa"
+    def __init__(self, type_ = 'dwa'):#"simple", "dwa"
         self.arrive = 0.1
         self.x = 0.0
         self.y = 0.0
@@ -120,6 +120,7 @@ class LocalPlanner:
         
     def planThreadFunc(self):
         print("running planning thread!!")
+        print("planner type: ", self.type)
         self.need_exit = False
         while not self.need_exit:
             self.planOnce()
