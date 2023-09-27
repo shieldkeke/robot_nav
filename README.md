@@ -1,19 +1,21 @@
 # robot_nav
-mobile robot practice in ZJU 
+**Read this in other languages: [English](README.md), [中文](README_zh.md).**
 
-浙江大学 2023年短学期《机器人与智能系统综合实践》 
+A course project for motion control simulation of a mobile robot
 
-移动机器人运动控制仿真
+## Introduction
 
-## 介绍
+The static map of this project has been given, we need to complete the kinematics (getting the speed of two wheels after knowing the v,w), TF message sending, global path planning and trajectory tracking. 
 
-本项目的静态地图已经给出，需要完成运动学（已知vw后得到双轮转速）、tf消息发送、全局路径规划和轨迹跟踪。本人完成A\*、JPS、RRT\*方法实现的全局路径规划，简单选取中间路径点后，使用朴素方法和DWA方法跟踪中间路径点。
+In the project, I completed the global path planning through A\*, JPS, RRT\* methods, and track the intermediate path points using the plain and DWA methods after selecting the intermediate points.
+
+![GIF](README_img/GIF.gif)
 
 ![image-20230711103108877](README_img/image-20230711103108877.png)
 
 ![image-20230711103003141](README_img/image-20230711103003141.png)
 
-## 使用方法
+## Usage
 
-编译后运行 `roslaunch course_agv_nav nav.launch`
+Compile the workspace and run the following command: `roslaunch course_agv_nav nav.launch`
 
